@@ -1,21 +1,13 @@
 import logging
 from math import sqrt
-from multiprocessing import Pool
 from os.path import isfile
 from time import time
 
 from dataclasses import dataclass
-from pandas import concat
 from scipy.sparse import load_npz, lil_matrix, save_npz
 
 N_CPU = 4
 logging.basicConfig(level=logging.INFO)
-
-
-def applyParallel(dfGrouped, func):
-    with Pool(N_CPU) as p:
-        ret_list = p.map(func, [group for name, group in dfGrouped])
-    return concat(ret_list, ignore_index=True)
 
 
 def primes_sieve(limit):
@@ -89,7 +81,6 @@ class Region:
                     ])
 
 
-
 class CityMap:
     def __init__(self, data_path='../data/cities.csv', max_cities: int = 10):
         with open(data_path, 'r') as file:
@@ -103,8 +94,8 @@ class CityMap:
         self.n_cities = len(self.cities)
         self.distance_matrix = None
         self.regions = []
-        if isfile('../store/dist_matrix.matrix'):
-            self.distance_matrix = load_npz('../store/dist_matrix.matrix')
+        if isfile('../store/dist_matrix.matrix.npz'):
+            self.distance_matrix = load_npz('../store/dist_matrix.matrix.npz')
         else:
             self.build_regions(max_cities)
             self.build_distance_matrix()
@@ -121,13 +112,16 @@ class CityMap:
         logging.info(f"scoring route")
         if route is None:
             route = range(self.n_cities)
+        if route[0]:
+            start = route.index(min(route))
+            route = route[start:] + route[:start]
         score = 0
         since_last_prime = 0
         for idx in range(len(route)):
             i = route[idx]
             j = route[(idx + 1) % len(route)]
             since_last_prime += 1
-            if self.distance_matrix and self.distance_matrix[min(i, j), max(i, j)]:
+            if self.distance_matrix[min(i, j), max(i, j)]:
                 dist = self.distance_matrix[min(i, j), max(i, j)]
             else:
                 dist = City.dist(self.cities[i], self.cities[j])
@@ -156,11 +150,11 @@ class CityMap:
                 else:
                     keep.append(region)
             if len(new) != 0:
-                logging.debug(f"Dropping {len(self.regions) - len(keep)} regions")
-                logging.debug(f"Adding {len(new)} regions")
+                logging.info(f"Dropping {len(self.regions) - len(keep)} regions")
+                logging.info(f"Adding {len(new)} regions")
                 self.regions = keep + new
             else:
-                logging.info(f"found {len(self.regions)} regions in {time()-start_time} seconds")
+                logging.info(f"found {len(self.regions)} regions in {time() - start_time} seconds")
                 return len(self.regions)
 
     def build_distance_matrix(self):
@@ -183,8 +177,8 @@ class CityMap:
         self.distance_matrix = self.distance_matrix.tocsr()
         save_npz('../store/dist_matrix.matrix', self.distance_matrix)
         logging.info(
-            f"finished distance matrix with {self.distance_matrix.getnnz()} entries in {start_time-time()} seconds\n" +
-            f" sparsity = {100 * (1-self.distance_matrix.getnnz() / self.n_cities / self.n_cities)} percent")
+            f"finished distance matrix with {self.distance_matrix.getnnz()} entries in {start_time - time()} seconds\n" +
+            f" sparsity = {100 * (1 - self.distance_matrix.getnnz() / self.n_cities / self.n_cities)} percent")
 
 
 # class AntColony:
