@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 def primes_sieve(limit):
     a = [True] * limit
     a[0] = a[1] = False
-    out = [0]   # hacky make zero an honorary prime today
+    out = []
     for (i, is_prime) in enumerate(a):
         if is_prime:
             for n in range(i * i, limit, i):
@@ -113,7 +113,6 @@ class CityMap:
         if route is None:
             route = range(self.n_cities)
         score = 0
-        since_last_prime = 0
         for idx in range(len(route)):
             i = route[idx]
             j = route[(idx + 1) % len(route)]
@@ -121,10 +120,7 @@ class CityMap:
                 dist = self.distance_matrix[i, j]
             else:
                 dist = City.dist(self.cities[i], self.cities[j])
-            score += dist * (1 if self.cities[j].is_prime or not since_last_prime or since_last_prime % 10 else 1.1)
-            since_last_prime += 1
-            if self.cities[j].is_prime:
-                since_last_prime = 0
+            score += dist * (1 if (self.cities[i].is_prime or (idx+1) % 10) else 1.1)
         return score
 
     def build_regions(self, max_cities: int):
@@ -185,7 +181,8 @@ class CityMap:
 
 
 def main():
-    c_map = CityMap(max_cities=5)
+    #c_map = CityMap(max_cities=5)
+    print(CityMap().score_route())
 
     return
 
