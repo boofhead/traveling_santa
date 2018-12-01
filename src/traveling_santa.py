@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 def primes_sieve(limit):
     a = [True] * limit
     a[0] = a[1] = False
-    out = []
+    out = [0]   # hacky make zero an honorary prime today
     for (i, is_prime) in enumerate(a):
         if is_prime:
             for n in range(i * i, limit, i):
@@ -112,20 +112,19 @@ class CityMap:
         logging.info(f"scoring route")
         if route is None:
             route = range(self.n_cities)
-        if route[0]:
-            start = route.index(min(route))
-            route = route[start:] + route[:start]
         score = 0
         since_last_prime = 0
         for idx in range(len(route)):
             i = route[idx]
             j = route[(idx + 1) % len(route)]
-            since_last_prime += 1
-            if self.distance_matrix[min(i, j), max(i, j)]:
-                dist = self.distance_matrix[min(i, j), max(i, j)]
+            if self.distance_matrix[i, j]:
+                dist = self.distance_matrix[i, j]
             else:
                 dist = City.dist(self.cities[i], self.cities[j])
-            score += dist * (1 if self.cities[i].is_prime or since_last_prime % 10 else 1.1)
+            score += dist * (1 if self.cities[j].is_prime or not since_last_prime or since_last_prime % 10 else 1.1)
+            since_last_prime += 1
+            if self.cities[j].is_prime:
+                since_last_prime = 0
         return score
 
     def build_regions(self, max_cities: int):
@@ -174,7 +173,7 @@ class CityMap:
                     if not self.distance_matrix[min(city_a.id, city_b.id), max(city_a.id, city_b.id)]:
                         self.distance_matrix[min(city_a.id, city_b.id), max(city_a.id, city_b.id)] = City.dist(city_a,
                                                                                                                city_b)
-        self.distance_matrix = self.distance_matrix.tocsr()
+        self.distance_matrix = self.distance_matrix.tocsr() + self.distance_matrix.tocsr().transpose()
         save_npz('../store/dist_matrix.matrix', self.distance_matrix)
         logging.info(
             f"finished distance matrix with {self.distance_matrix.getnnz()} entries in {start_time - time()} seconds\n" +
