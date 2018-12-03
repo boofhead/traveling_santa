@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 class AntColony:
-    def __init__(self, city_map: CityMap, bad_score=10 * 1515696.0, q=1., alpha=2.0, beta=0.5, ro=0.9):
+    def __init__(self, city_map: CityMap, bad_score=10 * 1515696.0, q=1., alpha=1.5, beta=2.0, ro=0.95):
         self.city_map = city_map
         self.distance_matrix = self.city_map.distance_matrix
         self.pow_dist_matrix = self.distance_matrix.power(-beta)
@@ -30,7 +30,7 @@ class AntColony:
         self.ro = ro
         self.prime_factor = 1.1 ** (-self.beta)
 
-    def find_route(self, n_ants=4, n_iterations=10000):
+    def find_route(self, n_ants=8, n_iterations=10000):
         best_score = inf
         for _ in range(n_iterations):
             with Pool(N_CPU) as p:
@@ -48,7 +48,6 @@ class AntColony:
                         if not isnan(scores[_id]):
                             min_id = min(route[_id], route[(_id + 1) % len(route)])
                             max_id = max(route[_id], route[(_id + 1) % len(route)])
-                            assert self.pheromone_matrix[min_id, max_id], f"tried to assign {scores[_id]} to pheromone matrix {(min_id, max_id)}"
                             self.pheromone_matrix[min_id, max_id] += self.q / scores[_id]
                             self.pheromone_matrix[max_id, min_id] += self.q / scores[_id]
             if len(best_scores):
@@ -70,7 +69,7 @@ class AntColony:
         scores = zeros_like(route, dtype=float)
         then = time()
         for i in range(self.city_map.n_cities):
-            if not i % 1000:
+            if not i % 10000:
                 now = time()
                 logging.info(f"step {i} time: {now - then}")
                 then = now
@@ -93,10 +92,9 @@ class AntColony:
                 next_id = choice(n.compress(not_visited))
                 scores[i] = nan
             else:
-                pow_distances *= not_visited
+                pow_distances *= not_visited * (
+                    1 if ((i + 1) % 10 or current_city_id in self.city_map.primes) else self.prime_factor)
                 pheromones = squeeze(self.pheromone_matrix.getrow(current_city_id).toarray())
-                if not ((current_city_id in self.city_map.primes) or (i+1) % 10):
-                    pow_distances *= self.prime_factor
                 probabilities = ((pheromones ** self.alpha) * pow_distances).take(candidates)
                 probabilities /= sum(probabilities)
                 next_id = choice(candidates, p=probabilities)

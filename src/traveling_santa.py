@@ -1,4 +1,6 @@
 import logging
+import pickle
+from collections import defaultdict
 from math import sqrt
 from os.path import isfile
 from time import time
@@ -82,23 +84,35 @@ class Region:
 
 
 class CityMap:
-    def __init__(self, data_path='../data/cities.csv', max_cities: int = 10):
+    def __init__(self,
+                 data_path='../data/cities.csv',
+                 dist_matrix_path='../store/dist_matrix.matrix',
+                 adjacency_path='../store/adj_dict.pickle', ):
+        self.cities = []
         with open(data_path, 'r') as file:
             lines = file.readlines()
         lines.pop(0)
         self.primes = primes_sieve(len(lines))
-        self.cities = []
         for id_, line in enumerate(lines):
             line = line.split(',')
             self.cities.append(City(int(line[0]), float(line[1]), float(line[2]), id_ in self.primes))
         self.n_cities = len(self.cities)
         self.distance_matrix = None
         self.regions = []
-        if isfile('../store/dist_matrix.matrix.npz'):
-            self.distance_matrix = load_npz('../store/dist_matrix.matrix.npz')
+        self.adjacency_dict = defaultdict(set)
+        if isfile(adjacency_path):
+            with open(adjacency_path, 'rb') as f:
+                self.adjacency_dict = pickle.load(f)
         else:
-            self.build_regions(max_cities)
+            self.build_regions()
+            self.build_adjacency_dict()
+            with open(adjacency_path, 'wb') as f:
+                pickle.dump(self.adjacency_dict, f)
+        if isfile(dist_matrix_path + '.npz'):
+            self.distance_matrix = load_npz(dist_matrix_path + '.npz')
+        else:
             self.build_distance_matrix()
+            save_npz(dist_matrix_path + '.npz', self.distance_matrix)
 
     def map_as_data(self):
         x = [0] * self.n_cities
@@ -107,6 +121,19 @@ class CityMap:
             x[i] = city.x
             y[i] = city.y
         return x, y
+
+    def build_adjacency_dict(self):
+        for i, region_a in enumerate(self.regions):
+            logging.info(f"checking region {i} for neighbours")
+            cities = region_a.cities
+            for region_b in self.regions[(i + 1):]:
+                if Region.is_neighbour(region_a, region_b):
+                    cities += region_b.cities
+            for j, city_a in enumerate(cities):
+                logging.info(f"adding adjacencies for city {city_a.id}")
+                for city_b in cities[(j + 1):]:
+                    self.adjacency_dict[city_a.id].add(city_b.id)
+                    self.adjacency_dict[city_b.id].add(city_a.id)
 
     def score_route(self, route=None):
         logging.info(f"scoring route")
@@ -120,10 +147,10 @@ class CityMap:
                 dist = self.distance_matrix[i, j]
             else:
                 dist = City.dist(self.cities[i], self.cities[j])
-            score += dist * (1 if (self.cities[i].is_prime or (idx+1) % 10) else 1.1)
+            score += dist * (1 if (self.cities[i].is_prime or (idx + 1) % 10) else 1.1)
         return score
 
-    def build_regions(self, max_cities: int):
+    def build_regions(self, max_cities: int = 1):
         start_time = time()
         max_x = 0
         max_y = 0
@@ -155,33 +182,20 @@ class CityMap:
     def build_distance_matrix(self):
         start_time = time()
         self.distance_matrix = lil_matrix((self.n_cities, self.n_cities))
-        for i, region_a in enumerate(self.regions):
-            cities = region_a.cities
-            n_neighbours = 0
-            for region_b in self.regions[(i + 1):]:
-                if Region.is_neighbour(region_a, region_b):
-                    n_neighbours += 1
-                    cities += region_b.cities
-            logging.debug(f"{n_neighbours} neighbours found")
-            logging.debug(f"Calculating distances for {len(cities)} cities")
-            for a, city_a in enumerate(cities):
-                for city_b in cities[(a + 1):]:
-                    if not self.distance_matrix[min(city_a.id, city_b.id), max(city_a.id, city_b.id)]:
-                        self.distance_matrix[min(city_a.id, city_b.id), max(city_a.id, city_b.id)] = City.dist(city_a,
-                                                                                                               city_b)
+        for i, city_ids in self.adjacency_dict.items():
+            for j in list(city_ids):
+                if not self.distance_matrix[min(i, j), max(i, j)]:
+                    self.distance_matrix[min(i, j), max(i, j)] = City.dist(self.cities[i], self.cities[j])
         self.distance_matrix = self.distance_matrix.tocsr() + self.distance_matrix.tocsr().transpose()
-        save_npz('../store/dist_matrix.matrix', self.distance_matrix)
         logging.info(
             f"finished distance matrix with {self.distance_matrix.getnnz()} entries in {start_time - time()} seconds\n" +
             f" sparsity = {100 * (1 - self.distance_matrix.getnnz() / self.n_cities / self.n_cities)} percent")
 
 
-# class AntColony:
-#     def __init__(self, city_map: CityMap):
 
 
 def main():
-    #c_map = CityMap(max_cities=5)
+    # c_map = CityMap(max_cities=5)
     print(CityMap().score_route())
 
     return
